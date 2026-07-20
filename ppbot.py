@@ -3,6 +3,7 @@ import asyncio
 import threading
 import secrets
 import requests
+import httpx
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -91,11 +92,20 @@ async def gestisci_genera(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
    await query.answer()
    await query.message.edit_text(t(user_id, "generating"), parse_mode="HTML")
    await gestisci_pubblicita(user_id, context, query.message.chat.id)
-   
-   # --- MODIFICA: Generazione Token ---
-   token = secrets.token_hex(4)
-   # Placeholder: Qui andrebbe la chiamata API a mail.tm per generare l'email reale
-   pending_tokens[token] = "esempio@mail.tm" 
+
+   #Usiamo httpx
+   async with httpx.AsyncClient() as client:
+       # --- INTEGRAZIONE MAIL.TM ---
+        # Creiamo l'email reale tramite API
+       response = await client.post("https://api.mail.tm/accounts", json={"address": f"user{secrets.token_hex(3)}@mail.tm", "password": "password123"})
+        
+   if response.status_code == 201:
+        email = response.json().get("address")
+        token = secrets.token_hex(4)
+        pending_tokens[token] = email
+   else:
+        await query.message.edit_text("❌ Errore nella creazione dell'email.")
+        return 
    
    # Il link include il token. Assicurati che l'URL sia corretto e collegato al tuo account ShrinkMe
    link = f"https://shrinkme.click/eKqd7KN?start={token}"
