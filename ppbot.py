@@ -79,7 +79,12 @@ async def imposta_lingua(update: Update, context: ContextTypes.DEFAULT_TYPE):
        [InlineKeyboardButton(t(query.from_user.id, "btn_sms"), callback_data="sms")]
     ]
     await query.message.reply_text(t(query.from_user.id,"welcome"), reply_markup=InlineKeyboardMarkup(keyboard),parse_mode="HTML")
-   
+
+async def gestisci_guida(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+     query = update.callback_query
+     await query.answer()
+     await query.message.edit_text(t(query.from_user.id, "guida"), parse_mode="HTML")
+    
 async def gestisci_genera(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
    query = update.callback_query
    user_id = query.from_user.id
