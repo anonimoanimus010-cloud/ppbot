@@ -87,30 +87,46 @@ async def gestisci_guida(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
      await query.message.edit_text(t(query.from_user.id, "guida"), parse_mode="HTML")
     
 async def gestisci_genera(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-   query = update.callback_query
-   user_id = query.from_user.id
-   await query.answer()
-   await query.message.edit_text(t(user_id, "generating"), parse_mode="HTML")
-   await gestisci_pubblicita(user_id, context, query.message.chat.id)
+    query = update.callback_query
+    user_id = query.from_user.id
+    await query.answer()
+    await query.message.edit_text(t(user_id, "generating"), parse_mode="HTML")
+    await gestisci_pubblicita(user_id, context, query.message.chat.id)
 
-   #Usiamo httpx
-   async with httpx.AsyncClient() as client:
-       # --- INTEGRAZIONE MAIL.TM ---
-        # Creiamo l'email reale tramite API
-       response = await client.post("https://api.mail.tm/accounts", json={"address": f"user{secrets.token_hex(3)}@mail.tm", "password": "password123"})
+    async with httpx.AsyncClient() as client:
+        # 1. Recuperiamo un dominio valido da mail.tm
+        try:
+            domains_resp = await client.get("https://api.mail.tm/domains")
+            if domains_resp.status_code != 200:
+                await query.message.edit_text("❌ Errore API domini.")
+                return
+            
+            domain = domains_resp.json()['hydra:member'][0]['domain']
+            
+            # 2. Creiamo l'email usando il dominio recuperato
+            username = f"user{secrets.token_hex(3)}"
+            payload = {
+                "address": f"{username}@{domain}",
+                "password": "password123"
+            }
+            
+            response = await client.post("https://api.mail.tm/accounts", json=payload)
+        except Exception as e:
+            await query.message.edit_text(f"❌ Errore di connessione: {str(e)}")
+            return
         
-   if response.status_code == 201:
+    if response.status_code == 201:
         email = response.json().get("address")
         token = secrets.token_hex(4)
         pending_tokens[token] = email
-   else:
-        await query.message.edit_text("❌ Errore nella creazione dell'email.")
+    else:
+        await query.message.edit_text(f"❌ Errore API {response.status_code}: {response.text}")
         return 
-   
-   # Il link include il token. Assicurati che l'URL sia corretto e collegato al tuo account ShrinkMe
-   link = f"https://shrinkme.click/eKqd7KN?start={token}"
-   keyboard = [[InlineKeyboardButton(t(user_id, "btn_vedi"), url=link)]]
-   await query.message.edit_text(t(user_id, "gen_ready"), reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+    
+    # Il link include il token
+    link = f"https://shrinkme.click/eKqd7KN?start={token}"
+    keyboard = [[InlineKeyboardButton(t(user_id, "btn_vedi"), url=link)]]
+    await query.message.edit_text(t(user_id, "gen_ready"), reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
 async def gestisci_controlla(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
