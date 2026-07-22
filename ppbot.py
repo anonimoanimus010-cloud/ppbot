@@ -148,8 +148,18 @@ async def gestisci_genera(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 async def gestisci_controlla(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    user_id = query.from_user.id
     await query.answer()
-    await query.message.edit_text(t(query.from_user.id, "no_messages"), parse_mode="HTML")
+    
+    # Rimandiamo il messaggio di nessun messaggio MA manteniamo il pulsante per poter ricontrollare ancora
+    keyboard = [[InlineKeyboardButton(t(user_id, "btn_controlla"), callback_data="controlla")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.message.edit_text(
+        f"{t(user_id, 'no_messages')}", 
+        reply_markup=reply_markup, 
+        parse_mode="HTML"
+    )
 
 async def gestisci_sms(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
