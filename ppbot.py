@@ -154,22 +154,65 @@ async def gestisci_controlla(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user_id = query.from_user.id
     await query.answer()
    
-    # Verifichiamo se abbiamo in memoria un'email per questo utente
+    # 1. Recuperiamo l'email associata a questo utente
     email = user_emails.get(user_id)
-    
     if not email:
         await query.message.edit_text(t(user_id, "session_expired"), parse_mode="HTML")
         return
 
-    # Generiamo l'orario attuale per aggirare il blocco di Telegram
     orario_attuale = datetime.now().strftime("%H:%M:%S")
-
     keyboard = [[InlineKeyboardButton(t(user_id, "btn_controlla"), callback_data="controlla")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
+
+    # 2. Ci connettiamo al servizio per leggere le mail vere
+    try:
+        async with httpx.AsyncClient() as client:
+            # A. Facciamo il login con la password standard che abbiamo usato per creare l'account
+            token_res = await client.post("https://api.mail.tm/token", json={
+                "address": email,
+                "password": "password123"
+            })
+            
+            if token_res.status_code == 200:
+                jwt_token = token_res.json().get("token")
+                headers = {"Authorization": f"Bearer {jwt_token}"}
+                
+                # B. Chiediamo la lista dei messaggi
+                msg_res = await client.get("https://api.mail.tm/messages", headers=headers)
+                
+                if msg_res.status_code == 200:
+                    messages = msg_res.json().get("hydra:member", [])
+                    
+                    if len(messages) > 0:
+                        # C. Se c'è almeno un messaggio, scarichiamo il testo del primo (il più recente)
+                        msg_id = messages[0]["id"]
+                        msg_detail_res = await client.get(f"https://api.mail.tm/messages/{msg_id}", headers=headers)
+                        
+                        if msg_detail_res.status_code == 200:
+                            msg_detail = msg_detail_res.json()
+                            sender = msg_detail.get("from", {}).get("address", "Sconosciuto")
+                            subject = msg_detail.get("subject", "Nessun Oggetto")
+                            body = msg_detail.get("text", "")[:800] # Leggiamo fino a 800 caratteri per non intagliare Telegram
+                            
+                            # Formattiamo il messaggio usando il dizionario delle lingue
+                            messaggio_formattato = t(user_id, "msg_block").format(
+                                sender=sender, subject=subject, body=body
+                            )
+                            inbox_text = f"📬 <b>Casella attiva:</b> {email}\n\n{messaggio_formattato}\n\n<i>Ultimo controllo: {orario_attuale}</i>"
+                        else:
+                            inbox_text = f"📬 <b>Casella attiva:</b> {email}\n\n❌ Errore nel download del testo.\n\n<i>Ultimo controllo: {orario_attuale}</i>"
+                    else:
+                        # Nessun messaggio trovato nella casella
+                        inbox_text = f"📬 <b>Casella attiva:</b> {email}\n\n{t(user_id, 'no_messages')}\n\n<i>Ultimo controllo: {orario_attuale}</i>"
+                else:
+                    inbox_text = f"📬 <b>Casella attiva:</b> {email}\n\n{t(user_id, 'auth_error')}\n\n<i>Ultimo controllo: {orario_attuale}</i>"
+            else:
+                inbox_text = f"📬 <b>Casella attiva:</b> {email}\n\n{t(user_id, 'auth_error')}\n\n<i>Ultimo controllo: {orario_attuale}</i>"
+                
+    except Exception as e:
+        inbox_text = f"📬 <b>Casella attiva:</b> {email}\n\n❌ Errore di connessione al server mail.\n\n<i>Ultimo controllo: {orario_attuale}</i>"
    
-        # Creiamo il messaggio unendo l'email, il messaggio vuoto e l'orario
-    inbox_text = f"📬 <b>Casella attiva:</b> {email}\n\n{t(user_id, 'no_messages')}\n\n<i>Ultimo controllo: {orario_attuale}</i>"
-   
+    # 3. Aggiorniamo il messaggio su Telegram
     try:
         await query.message.edit_text(
             inbox_text,
@@ -177,7 +220,7 @@ async def gestisci_controlla(update: Update, context: ContextTypes.DEFAULT_TYPE)
             parse_mode="HTML"
         )
     except Exception:
-        # Se l'utente preme due volte nello stesso esatto secondo, intercettiamo l'errore senza far crashare nulla
+        # Ignora l'errore se l'utente clicca troppo velocemente senza modifiche reali
         pass
 
 async def gestisci_sms(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
