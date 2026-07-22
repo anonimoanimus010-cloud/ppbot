@@ -53,7 +53,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
        if token in pending_tokens:
            email = pending_tokens.pop(token)
            user_lang[update.effective_user.id] = user_lang.get(update.effective_user.id, "en")
-           await update.message.reply_text(t(update.effective_user.id, "unlock_ok").format(email=email), parse_mode="HTML")
+           # Creiamo il pulsante per controllare la posta della nuova email
+           keyboard = [[InlineKeyboardButton(t(update.effective_user.id, "btn_controlla"), callback_data="controlla")]]
+           reply_markup = InlineKeyboardMarkup(keyboard)
+           
+           await update.message.reply_text(
+               t(update.effective_user.id, "unlock_ok").format(email=email), 
+               reply_markup=reply_markup, 
+               parse_mode="HTML"
+           )
            return
        else:
            await update.message.reply_text(t(update.effective_user.id, "token_invalid"), parse_mode="HTML")
